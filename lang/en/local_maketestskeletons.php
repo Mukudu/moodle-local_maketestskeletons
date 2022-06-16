@@ -15,18 +15,11 @@
 // along with Moodle.  If not, see <https://www.gnu.org/licenses/>.
 
 /**
- * Version file.
+ * English Language file.
  *
  * @package   local_maketestskeletons
  * @copyright 2019 - 2021 Mukudu Ltd - Bham UK
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-defined('MOODLE_INTERNAL') || die();
-$plugin->version   = 2022040701;
-$plugin->requires  = 2020061500;    // Requires M3.9.0.
-$plugin->component = 'local_maketestskeletons';
-$plugin->dependencies = array(
-    'local_moodlecheck'  => 2021051200
-);
-
+$string['pluginname'] = 'Make Test Skeleton Files';
