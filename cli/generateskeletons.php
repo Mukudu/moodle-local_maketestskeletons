@@ -29,14 +29,20 @@ if (isset($_SERVER['REMOTE_ADDR'])) {
 }
 
 require(__DIR__ . '/../../../config.php');
+require_once(__DIR__ . '/../classes/local_maketestskeletons_file.php');
+require_once(__DIR__ .'/../locallib.php');
 global $CFG;
 require_once($CFG->libdir . '/clilib.php');
-require_once($CFG->dirroot . '/local/moodlecheck/file.php');
-require_once('../locallib.php');
 
-$testsdir = 'tests/';
-$excludefiles = array('/settings.php', '/version.php');
-$excludedirs = array('/tests', '/db', '/lang/en');
+$testsdir = 'tests/';       // Trailing slash required.
+// $excludefiles = array('/settings.php', '/version.php');
+// $excludedirs = array('/tests', '/db', '/lang/en');
+
+$excludefiles = array();
+$excludedirs = array('/db');
+
+// Add the tests folder to the directory exclusions.
+$excludedirs[] = '/' . trim($testsdir, '/');
 
 // Test Moodle logo
 cli_logo();
@@ -51,6 +57,14 @@ list($options, $unrecognized) = cli_get_params(
         'h' => 'help',
     ]
 );
+
+if ($unrecognized) {
+    $message = 'Unrecognised parameters';
+    foreach ($unrecognized as $param => $value) {
+        $message .=  " $param,";
+    }
+    echo rtrim($message, ',');
+}
 
 $help = "
 Generates PHPUnit Test skeleton files.
@@ -132,7 +146,7 @@ foreach ($filedets as $files) {
         }
 
         // TODO BEN remove.
-        if (basename($relativefile) != 'check_name.php') {
+        if (basename($relativefile) != 'snapshot_backedup.php') {
             continue;
         }
 
@@ -144,7 +158,8 @@ foreach ($filedets as $files) {
         } else {
             $pathbit = '';
         }
-        $testfilename = $fullpluginpath . $testsdir . $pathbit . 'test_' . basename($file);
+
+        $testfilename = $fullpluginpath . $testsdir . 'test_' . $pathbit . basename($file);
         if (!$options['purge'] && file_exists($testfilename)) {
             echo("Test file exists for '$relativefile', skipping generation");
             continue;
@@ -155,33 +170,47 @@ foreach ($filedets as $files) {
 
         $classlines = array();
         // This is why we require local/moodlecheck
-        $parsefile = new local_moodlecheck_file($file);
+        $parsefile = new local_maketestskeletons_file($file);
 
 //         $tokens = $parsefile->get_tokens();
 //         die(print_r($tokens, true));
 
-        // Check if this is a UI facing script
-        if (is_ui_facing($parsefile, str_replace($CFG->dirroot, '', $file))) {
+
+        // We do not test moodleforms.
+        $extendedclasses = $parsefile->get_extendedclasses();
+        if (is_moodleform($extendedclasses)) {
             continue;
         }
+
+        // Check if this is a UI facing script
+        $requires = $parsefile->get_requires();
+        if (is_ui_facing($requires, str_replace($CFG->dirroot, '', $file))) {
+            continue;
+        }
+
+        // Check if we are an events class
+        $iseventclass = is_eventclass($extendedclasses);
 
         $classes = $parsefile->get_classes();
         if (count($classes) > 1) {
             die('Cannot deal with files with multiple classes');
         }
+
         $functions = $parsefile->get_functions();
         // If there are no funtions - then we have nothing to do.
         if (empty($functions)) {
             continue;
         }
+
         $classname = '';
         if (count($classes)) {  // Will only be one.
             $classname = $classes[0]->name;
+
             // Let's see if there is a constructor method
             foreach ($functions as $function) {
                 if ($function->name == '__construct') {
+                    $argsnippet = '';
                     if (count($function->arguments)) {
-                        $argsnippet = '';
                         foreach ($function->arguments as $arg) {
                             if ($argmt = $arg[1]) {
                                 $classlines[] = "\t\t$argmt = null;\t// Provide a value here.";
@@ -191,11 +220,12 @@ foreach ($filedets as $files) {
                                 $argsnippet .= $argmt;
                             }
                         }
-                        $classlines[] = "\t\t" . '$' . $classname . " = new \\$classname($argsnippet);";
-                    } else {
-                        $classlines[] = "\t\t" . '$' . $classname . " = new \\$classname();";
                     }
+                    $classlines[] = "\t\t" . '$' . $classname . " = new \\$classname($argsnippet);";
                 }
+            }
+            if (empty($classlines)) {
+                $classlines[] = "\t\t" . '$' . $classname . " = new \\$classname(); // This may cause errors as we do not know the arguments we need.";
             }
         }
 
@@ -233,7 +263,7 @@ foreach ($filedets as $files) {
             $methodlines .=  get_pending_lines();
             $variablename = '$' . $function->name;
 
-            if (!$isstatic && $classname) {    // Class methods tests.
+            if (!$isstatic && count($classlines)) {    // Class methods tests.
                 $methodlines .= implode("\n", $classlines) . "\n\n";
             }
 
@@ -254,7 +284,6 @@ foreach ($filedets as $files) {
                 $methodlines .= "\t\t" . $variablename . ' = \\' . $function->fullname . "($argsnippet);\n";
             }
 
-
             // Add in a final assertion.
             $methodlines .= "\t\t" . '$this->assertNotEmpty(' . $variablename . ", 'Provide a better assertion here!');\n";
 
@@ -263,6 +292,12 @@ foreach ($filedets as $files) {
             $filelines .= $methodlines;
 
         }
+
+        $isevent = is_eventclass($classes);
+        if ($isevent) {
+            $filelines .= get_trigger_testlines('\local_course_history\event\snapshot_backedup');
+        }
+
         $filelines .= get_file_end();
 
         file_put_contents($testfilename, $filelines);

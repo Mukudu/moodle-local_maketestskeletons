@@ -74,28 +74,68 @@ function get_pending_lines() {
     return $pendinglines;
 }
 
-function is_ui_facing(\local_moodlecheck_file $moodlecheckfile, $pluginfilepath) {
-
-    // Get the file depth to compare relative depth for config.php.
-    $filedepth = count(explode('/', ltrim(dirname($pluginfilepath), '/')));
-
-    $tokens = $moodlecheckfile->get_tokens();
-    $tokenscount = count($tokens);
-    for ($tid = 0; $tid < $tokenscount; $tid++) {
-        if ($tokens[$tid][0] == T_REQUIRE || $tokens[$tid][0] == T_REQUIRE_ONCE) {
-            for ($tid++; $tid < $tokenscount; $tid++) {
-                if ($tokens[$tid][0] == T_CONSTANT_ENCAPSED_STRING) {
-                    $requiredfile = ltrim(trim($tokens[$tid][1], '"\''), '/');
-                    if (basename($requiredfile) == 'config.php') {
-                        // Let's double check by checking file depth - that this is the root config.php.
-                        if ($filedepth == count(explode('/', dirname($requiredfile)))) {
-                            return true;
-                        }
-                    }
-                    break;
-                }
-            }
+function is_moodleform($extendedclasses) {
+    // This function will not find classes extending other classes that extend moodleform.
+    foreach ($extendedclasses as $class => $extendedclass) {
+        if (stripos($extendedclass->name, 'moodleform') !== false) {
+            return true;
         }
     }
-    return true;
+    return false;
+}
+
+function is_ui_facing($requires, $pluginfilepath) {
+    // Get the file depth to compare relative depth for config.php.
+    $filedepth = count(explode('/', ltrim(dirname($pluginfilepath), '/')));
+    foreach ($requires as $required) {
+        $requiredfile = ltrim(trim($required->name, '"\''), '/');
+        if (basename($requiredfile) == 'config.php') {
+            // Let's double check by checking file depth - that this is the root config.php.
+            if ($filedepth == count(explode('/', dirname($requiredfile)))) {
+                return true;
+            }
+        }
+        break;
+    }
+    return false;
+}
+
+function get_trigger_testlines($classname) {
+
+    return
+'
+    function test_trigger() {
+        $this->resetAfterTest();
+
+        $sink = $this->redirectEvents();
+
+        /* Here ensure to define the event properties that are required */
+        $eventdata = array(
+            "other" => array("message" => "This is just a test")
+        );
+
+        $event = ' . $classname . '::create($eventdata);
+        $event->trigger();
+
+        $events = $sink->get_events();
+        $this->assertGreaterThan(0, count($events));
+
+        foreach ($events as $event) {
+            if ($event instanceof ' . $classname . ') {
+                break;  // The variable $event will be the correct event.
+            }
+        }
+        // This will fail if the event is not found.
+        $this->assertInstanceOf("' . $classname . '", $event);
+    }
+
+';
+
+}
+
+function is_eventclass($classes) {
+
+    die(print_r($classes, true)) . "\n";
+
+    return false;
 }
