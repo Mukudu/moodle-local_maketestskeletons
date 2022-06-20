@@ -118,7 +118,7 @@ if (!empty($options['help']) || empty($options['plugin-path'])) {
 }
 
 // Namespace for plugin.
-$namespace = substr_replace($options['plugin-path'], '_', $pos, 1);
+$testnamespace = substr_replace($options['plugin-path'], '_', $pos, 1);
 
 // Now let's get all possible testable php files.
 $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($fullpluginpath));
@@ -145,8 +145,8 @@ foreach ($filedets as $files) {
             continue;
         }
 
-        // TODO BEN remove.
-        if (basename($relativefile) != 'snapshot_backedup.php') {
+        // TODO BEN remove. snapshot_backedup.php
+        if (basename($relativefile) != 'lib.php') {
             continue;
         }
 
@@ -166,30 +166,20 @@ foreach ($filedets as $files) {
         }
 
         $filelines = '';
-        $filelines .= get_filetop($namespace, ltrim($relativefile, '/'));
+        $filelines .= get_filetop($testnamespace, ltrim($relativefile, '/'), $testfilename);
 
-        $classlines = array();
         // This is why we require local/moodlecheck
         $parsefile = new local_maketestskeletons_file($file);
 
-//         $tokens = $parsefile->get_tokens();
-//         die(print_r($tokens, true));
+        //         $tokens = $parsefile->get_tokens();
+        //         die(print_r($tokens, true));
 
-
-        // We do not test moodleforms.
-        $extendedclasses = $parsefile->get_extendedclasses();
-        if (is_moodleform($extendedclasses)) {
-            continue;
+        // Check if this is a UI facing script.
+        if ($requires = $parsefile->get_requires()) {
+            if (is_ui_facing($requires, str_replace($CFG->dirroot, '', $file))) {
+                continue;
+            }
         }
-
-        // Check if this is a UI facing script
-        $requires = $parsefile->get_requires();
-        if (is_ui_facing($requires, str_replace($CFG->dirroot, '', $file))) {
-            continue;
-        }
-
-        // Check if we are an events class
-        $iseventclass = is_eventclass($extendedclasses);
 
         $classes = $parsefile->get_classes();
         if (count($classes) > 1) {
@@ -202,30 +192,64 @@ foreach ($filedets as $files) {
             continue;
         }
 
+        $namespace = null;
+        $extendedclasses = null;
         $classname = '';
+        $iseventclass = false;
+        $classlines = array();
         if (count($classes)) {  // Will only be one.
-            $classname = $classes[0]->name;
+
+            if ($namespace = $parsefile->get_namespace()) {
+                $classname = '\\' . $namespace->name . '\\' . $classes[0]->name;
+            } else {
+                $classname = '\\' . $classes[0]->name;
+            }
+
+            //die(print_r($namespace, true)) . "\n";
+
+            $classvarname = $classes[0]->name;
+
+            $extendedclasses = $parsefile->get_extendedclasses();
+
+            if ($extendedclasses && count($extendedclasses)) {
+                // We do not test moodleforms.
+                if (is_moodleform_class($extendedclasses)) {
+                    continue;
+                }
+
+                // Check if we are an events class
+                $iseventclass = is_event_class($namespace, $extendedclasses, $file);
+            }
 
             // Let's see if there is a constructor method
-            foreach ($functions as $function) {
-                if ($function->name == '__construct') {
-                    $argsnippet = '';
-                    if (count($function->arguments)) {
-                        foreach ($function->arguments as $arg) {
-                            if ($argmt = $arg[1]) {
-                                $classlines[] = "\t\t$argmt = null;\t// Provide a value here.";
-                                if ($argsnippet) {
-                                    $argsnippet .= ', ';
+            if (!$iseventclass) {
+                foreach ($functions as $function) {
+                    if ($function->name == '__construct') {
+                        $argsnippet = '';
+                        if (count($function->arguments)) {
+                            foreach ($function->arguments as $arg) {
+                                if ($argmt = $arg[1]) {
+                                    $classlines[] = "\t\t$argmt = null;\t// Provide a value here.";
+                                    if ($argsnippet) {
+                                        $argsnippet .= ', ';
+                                    }
+                                    $argsnippet .= $argmt;
                                 }
-                                $argsnippet .= $argmt;
                             }
                         }
+                        $classlines[] = "\t\t" . '$' . $classvarname . " = new $classname($argsnippet);";
                     }
-                    $classlines[] = "\t\t" . '$' . $classname . " = new \\$classname($argsnippet);";
                 }
+            } else {            // Constructor for events is different.
+                // $event = \local_course_history\event\snapshot_backedup::create($eventdata);
+                $classlines[] = "\t\t" . '/* Here ensure to define the event properties that are required */';
+                $classlines[] = "\t\t" . '$eventdata = array(';
+                $classlines[] = "\t\t\t" . '"other" => array("message" => "This is just a test")';
+                $classlines[] = "\t\t" . ');';
+                $classlines[] = "\t\t" . '$' . "$classvarname = $classname::create(\$eventdata);";
             }
             if (empty($classlines)) {
-                $classlines[] = "\t\t" . '$' . $classname . " = new \\$classname(); // This may cause errors as we do not know the arguments we need.";
+                $classlines[] = "\t\t" . '$' . $classvarname . " = new $classname(); // This may cause errors as we do not know the arguments we need.";
             }
         }
 
@@ -238,14 +262,18 @@ foreach ($filedets as $files) {
             // Ignore private, protected functions
             $ispublic = false;
             $isstatic = false;
-            foreach($function->accessmodifiers as $accessmodifier) {
-                switch ($accessmodifier) {
-                    case T_PUBLIC :
-                        $ispublic = true;
-                        break;
-                    case T_STATIC :
-                        $isstatic = true;
-                        break;
+            if (empty($function->accessmodifiers)) {
+                $ispublic = true;
+            } else {
+                foreach($function->accessmodifiers as $accessmodifier) {
+                    switch ($accessmodifier) {
+                        case T_PUBLIC :
+                            $ispublic = true;
+                            break;
+                        case T_STATIC :
+                            $isstatic = true;
+                            break;
+                    }
                 }
             }
 
@@ -279,9 +307,16 @@ foreach ($filedets as $files) {
             }
 
             if ($classname && !$isstatic) {
-                $methodlines .= "\t\t" . $variablename . ' = $' . $classname . '->' . $function->name . "($argsnippet);\n";
+                $methodlines .= "\t\t" . $variablename . ' = $' . $classvarname . '->' . $function->name . "($argsnippet);\n";
+            } else if ($classname && $isstatic) {
+                if ($namespace) {
+                    $staticfuncall = '\\' . $namespace->name . '\\' . $function->fullname;
+                } else {
+                    $staticfuncall = '\\' . $function->fullname;
+                }
+                $methodlines .= "\t\t$variablename = $staticfuncall($argsnippet);\n";
             } else {
-                $methodlines .= "\t\t" . $variablename . ' = \\' . $function->fullname . "($argsnippet);\n";
+                $methodlines .= "\t\t$variablename = " . $function->name . "($argsnippet);\n";
             }
 
             // Add in a final assertion.
@@ -293,9 +328,8 @@ foreach ($filedets as $files) {
 
         }
 
-        $isevent = is_eventclass($classes);
-        if ($isevent) {
-            $filelines .= get_trigger_testlines('\local_course_history\event\snapshot_backedup');
+        if ($iseventclass) {
+            $filelines .= get_trigger_testlines($classname);
         }
 
         $filelines .= get_file_end();

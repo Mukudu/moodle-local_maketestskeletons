@@ -103,13 +103,19 @@ class local_maketestskeletons_file extends local_moodlecheck_file {
                     case T_NAMESPACE:
                         $this->namespace = new stdClass();
                         $this->namespace->tid = $this->next_nonspace_token($tid, true);
-                        $this->namespace->name = $this->tokens[$tid][1];
+                        $this->namespace->name = '';
                         for ($tid++; $tid < $this->tokenscount; $tid++) {
+                            if ($this->is_whitespace_token($tid)) {
+                                continue;
+                            }
                             if ($this->tokens[$tid][0] == -1) { // ;
                                 break;
                             } else {
                                 $this->namespace->name .= $this->tokens[$tid][1];
                             }
+                        }
+                        if (!$this->namespace->name) {
+                            $this->namespace = null;
                         }
                         break;
                     case T_EXTENDS:

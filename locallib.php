@@ -22,12 +22,12 @@
  * @license   http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
 
-function get_filetop($namespace, $relativefilepath) {
+function get_filetop($namespace, $relativefilepath, $testfilename) {
 
     $thisyear = date('Y');
-    $classname = 'test_' . basename($relativefilepath, '.php');
+    $classname = basename($testfilename, '.php');
     return
-    "<?php
+"<?php
 // This file is part of Moodle - https://moodle.org/
 //
 // Moodle is free software: you can redistribute it and/or modify
@@ -74,9 +74,9 @@ function get_pending_lines() {
     return $pendinglines;
 }
 
-function is_moodleform($extendedclasses) {
-    // This function will not find classes extending other classes that extend moodleform.
-    foreach ($extendedclasses as $class => $extendedclass) {
+function is_moodleform_class($extendedclasses) {
+    // This function will not find classes extending classes that extend moodleform or mod_moodleform.
+    foreach ($extendedclasses as $extendedclass) {
         if (stripos($extendedclass->name, 'moodleform') !== false) {
             return true;
         }
@@ -85,6 +85,7 @@ function is_moodleform($extendedclasses) {
 }
 
 function is_ui_facing($requires, $pluginfilepath) {
+
     // Get the file depth to compare relative depth for config.php.
     $filedepth = count(explode('/', ltrim(dirname($pluginfilepath), '/')));
     foreach ($requires as $required) {
@@ -104,6 +105,9 @@ function get_trigger_testlines($classname) {
 
     return
 '
+    /**
+     * Test the triggering of the event.
+     */
     function test_trigger() {
         $this->resetAfterTest();
 
@@ -126,16 +130,27 @@ function get_trigger_testlines($classname) {
             }
         }
         // This will fail if the event is not found.
-        $this->assertInstanceOf("' . $classname . '", $event);
+        $this->assertInstanceOf(' . "'" . $classname . "'" . ', $event);
     }
 
 ';
 
 }
 
-function is_eventclass($classes) {
+function is_event_class($namespace, $extendedclasses, $file) {
 
-    die(print_r($classes, true)) . "\n";
+    // Quickest way to find it
+    foreach ($extendedclasses as $extendedclass) {
+        if ($extendedclass->name == '\core\event\base'){
+            return true;
+        }
+    }
+    // In case we are extending a class that extends \core\event\base.
+    if (is_object($namespace)) {        // Events always are in namsepaces.
+        if (strpos($namespace->name, '/event') !== false && strpos($file, 'classes/event') !== false) {
+            return true;
+        }
+    }
 
     return false;
 }
