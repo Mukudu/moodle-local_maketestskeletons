@@ -23,7 +23,7 @@
  */
 
 defined('MOODLE_INTERNAL') || die();
-$plugin->version   = 2022040701;
+$plugin->version   = 2022062300;
 $plugin->requires  = 2020061500;    // Requires M3.9.0.
 $plugin->component = 'local_maketestskeletons';
 $plugin->dependencies = array(

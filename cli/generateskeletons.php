@@ -145,10 +145,10 @@ foreach ($filedets as $files) {
             continue;
         }
 
-        // TODO BEN remove. snapshot_backedup.php
-        if (basename($relativefile) != 'lib.php') {
-            continue;
-        }
+        // TODO BEN remove.
+//         if (basename($relativefile) != 'lib.php') {
+//             continue;
+//         }
 
         echo "Processing $file\n";
 
@@ -161,7 +161,7 @@ foreach ($filedets as $files) {
 
         $testfilename = $fullpluginpath . $testsdir . 'test_' . $pathbit . basename($file);
         if (!$options['purge'] && file_exists($testfilename)) {
-            echo("Test file exists for '$relativefile', skipping generation");
+            echo("Test file exists for '$relativefile', skipping generation\n");
             continue;
         }
 
