@@ -109,7 +109,7 @@ function get_trigger_testlines($classname) {
      * Test the triggering of the event.
      */
     function test_trigger() {
-        $this->resetAfterTest();
+        $this->resetAfterTest(false);
 
         $sink = $this->redirectEvents();
 
