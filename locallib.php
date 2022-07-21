@@ -67,11 +67,13 @@ function get_file_end() {
 }
 
 function get_pending_lines() {
-    $pendinglines = '';
-    $pendinglines .= "\t\t" . '$this->resetAfterTest(false);' . "\n";
-    $pendinglines .= "\t\t" . '// Fail this test for now.' . "\n";
-    $pendinglines .= "\t\t" . '$this->assertTrue(false, "This test needs to be completed");' . "\n\n";
-    return $pendinglines;
+    return "
+
+        \$this->resetAfterTest(false);
+        // Mark this test as incomplete.
+        \$this->markTestIncomplete('This test needs to be completed');
+
+";
 }
 
 function is_moodleform_class($extendedclasses) {

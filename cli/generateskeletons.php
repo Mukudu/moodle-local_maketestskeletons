@@ -150,6 +150,8 @@ foreach ($filedets as $files) {
 //             continue;
 //         }
 
+        // TODO Ben - variable names should only have alphanumeric chars only
+
         echo "Processing $file\n";
 
         // Check for existing file.
@@ -159,7 +161,7 @@ foreach ($filedets as $files) {
             $pathbit = '';
         }
 
-        $testfilename = $fullpluginpath . $testsdir . 'test_' . $pathbit . basename($file);
+        $testfilename = $fullpluginpath . $testsdir . $pathbit . basename($file, '.php') . '_test.php';
         if (!$options['purge'] && file_exists($testfilename)) {
             echo("Test file exists for '$relativefile', skipping generation\n");
             continue;
